@@ -1,4 +1,4 @@
-# 📱 App Rank Tracker
+# Mobile ASO Tracker
 
 **Real-time ASO tracking tool** for monitoring app positions across Google Play Store and Apple App Store.
 
