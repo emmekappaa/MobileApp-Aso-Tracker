@@ -1,3 +1,2 @@
 playwright
-google-play-scraper
 tqdm
