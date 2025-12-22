@@ -1,27 +1,38 @@
-# App Rank Tracker
+# 📱 App Rank Tracker
 
-Track app rankings on Google Play Store and Apple App Store.
+**Real-time ASO tracking tool** for monitoring app positions across Google Play Store and Apple App Store.
 
-## Technologies
+[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Playwright](https://img.shields.io/badge/playwright-latest-green.svg)](https://playwright.dev/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-- **Web scraping**: [Playwright](https://playwright.dev/) (Chromium browser automation)
+## ✨ Features
 
-## Setup
+- **Dual-store tracking** - Monitor both iOS App Store and Google Play
+- **Multi-region support** - Track rankings across different countries
+- **Batch processing** - Scan multiple keywords simultaneously
+- **JSON export** - Automatic timestamped result saving
+
+## 🚀 Quick Start
+
+### Installation
 
 ```bash
+# Create virtual environment
 python -m venv .venv
 
-# Activate virtual environment:
+# Activate virtual environment
 # macOS/Linux:
 source .venv/bin/activate
 # Windows:
 .venv\Scripts\activate
 
+# Install dependencies
 pip install -r requirements.txt
 playwright install chromium
 ```
 
-## Configuration
+### Configuration
 
 Create `settings.json`:
 
@@ -39,26 +50,24 @@ Create `settings.json`:
 ]
 ```
 
-### Configuration Parameters
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `active` | boolean | Enable/disable this tracking task |
+| `platforms` | array | Stores to scan: `"play"` (Google Play), `"app"` (App Store) |
+| `android_id` | string | App package name (e.g., `"com.example.app"`) |
+| `ios_id` | string | App Store numeric ID (e.g., `"1234567890"`) |
+| `n_hits` | integer | Search depth (default: `50`) - higher = slower but deeper |
+| `keywords` | array | Search terms to track |
+| `countries` | array | Country codes (e.g., `["us", "it", "de"]`) |
 
-- **`active`**: `true`/`false` - Enable or disable this tracking task
-- **`platforms`**: `["play", "app"]` - Stores to scan (`"play"` = Google Play, `"app"` = App Store)
-- **`android_id`**: Your app's package name on Google Play (e.g., `"com.example.app"`)
-- **`ios_id`**: Your app's numeric ID on App Store (e.g., `"1234567890"`)
-- **`n_hits`**: Number of search results to analyze (default: `50`)
-  - Higher values = deeper search but slower execution
-  - Example: `100` checks top 100 positions, `200` checks top 200
-  - If your app is ranked beyond this number, it will show as "not found"
-- **`keywords`**: Array of search terms to track
-- **`countries`**: Array of country codes (e.g., `["us", "it", "de", "fr"]`)
-
-## Usage
+### Run
 
 ```bash
 python tracker.py
 ```
 
-### Example Output
+## 📈 Example Output
 
 ```
 Android |███████████████████████████████████████████████████████████| 100%
@@ -83,4 +92,12 @@ iOS |█████████████████████████
 Total: 12 | Ranked: 11 | Not found: 1 | Errors: 0
 ```
 
-Results saved in `results/`.
+Results automatically saved in `results/scan_YYYYMMDD_HHMMSS.json`
+
+## 🛠️ Tech Stack
+
+- **[Playwright](https://playwright.dev/)** - Chromium browser automation for accurate web scraping
+
+## 📝 License
+
+MIT
