@@ -4,7 +4,7 @@
 
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Playwright](https://img.shields.io/badge/playwright-latest-green.svg)](https://playwright.dev/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
 
 ## ✨ Features
 
@@ -57,7 +57,7 @@ Create `settings.json`:
 | `platforms` | array | Stores to scan: `"play"` (Google Play), `"app"` (App Store) |
 | `android_id` | string | App package name (e.g., `"com.example.app"`) |
 | `ios_id` | string | App Store numeric ID (e.g., `"1234567890"`) |
-| `n_hits` | integer | Search depth (default: `50`) - higher = slower but deeper |
+| `n_hits` | integer | Search depth (default: `50`) higher = slower but deeper |
 | `keywords` | array | Search terms to track |
 | `countries` | array | Country codes (e.g., `["us", "it", "de"]`) |
 
