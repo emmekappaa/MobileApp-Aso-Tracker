@@ -11,6 +11,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 import google_play_scraper
+from tqdm import tqdm
 
 
 def log(msg, level="info"):
@@ -26,36 +27,36 @@ def load_config():
 def scrape_ios(page, term, region, limit):
     url = f"https://apps.apple.com/{region}/iphone/search?term={urllib.parse.quote(term)}"
     try:
-        page.goto(url, timeout=20000)
+        page.goto(url, timeout=30000)
         page.wait_for_timeout(3000)
     except Exception as e:
-        log(f"iOS load failed: {e}", "warn")
         return []
     
     found = []
     max_scrolls = max(8, limit // 15)
     for i in range(max_scrolls):
-        links = page.query_selector_all("a[href*='/app/'], a[href*='/id']")
-        for el in links:
-            href = el.get_attribute("href") or ""
-            match = re.search(r"/id(\d+)", href)
-            if match and match.group(1) not in found:
-                found.append(match.group(1))
-            if len(found) >= limit:
-                return found
-        page.evaluate("window.scrollBy(0, 1500)")
-        time.sleep(0.4)
+        try:
+            links = page.query_selector_all("a[href*='/app/'], a[href*='/id']")
+            for el in links:
+                href = el.get_attribute("href") or ""
+                match = re.search(r"/id(\d+)", href)
+                if match and match.group(1) not in found:
+                    found.append(match.group(1))
+                if len(found) >= limit:
+                    return found
+            page.evaluate("window.scrollBy(0, 1500)")
+            time.sleep(0.4)
+        except Exception as e:
+            break
     return found
 
 
 def scrape_android(term, region, limit):
-    """Use google-play-scraper API for Android."""
     try:
         lang = region.lower() if region.lower() in ("it", "de", "fr", "es", "pt") else "en"
-        results = google_play_scraper.search(term, lang=lang, country=region.upper(), n_hits=limit)
+        results = google_play_scraper.search(term, lang=lang, country=region.lower(), n_hits=limit)
         return [r["appId"] for r in results]
     except Exception as e:
-        log(f"Android API failed: {e}", "warn")
         return []
 
 
@@ -69,54 +70,96 @@ def find_position(listing, target_id):
 def run_scan():
     config = load_config()
     output = []
+    browser = None
     
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
-        page = browser.new_page()
-        
-        for task in config:
-            if not task.get("active", True):
-                continue
-            
+    android_searches = 0
+    ios_searches = 0
+    for task in config:
+        if task.get("active", True):
             stores = task.get("platforms", ["play"])
             if isinstance(stores, str):
                 stores = [stores]
+            keywords = task.get("keywords", [])
+            countries = task.get("countries", [])
+            total_per_store = len(keywords) * len(countries)
             
-            android_id = task.get("android_id", "")
-            ios_id = str(task.get("ios_id", ""))
-            limit = task.get("n_hits", 50)
+            if "play" in stores:
+                android_searches += total_per_store
+            if "app" in stores:
+                ios_searches += total_per_store
+    
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            page = browser.new_page()
             
-            for store in stores:
-                target = ios_id if store == "app" else android_id
-                store_label = "iOS" if store == "app" else "Android"
-                log(f"Scanning {store_label}: {target}")
+            android_pbar = None
+            ios_pbar = None
+            
+            if android_searches > 0:
+                android_pbar = tqdm(total=android_searches, desc="Android", unit="", 
+                                   bar_format='{desc} |{bar}| {percentage:3.0f}%')
+            if ios_searches > 0:
+                ios_pbar = tqdm(total=ios_searches, desc="iOS", unit="", 
+                               bar_format='{desc} |{bar}| {percentage:3.0f}%')
+            
+            for task in config:
+                if not task.get("active", True):
+                    continue
                 
-                for kw in task.get("keywords", []):
-                    for region in task.get("countries", []):
-                        
-                        if store == "app":
-                            listing = scrape_ios(page, kw, region.lower(), limit)
-                        else:
-                            listing = scrape_android(kw, region, limit)
-                        
-                        log(f"  Found {len(listing)} apps for '{kw}' in {region.upper()}", "info")
-                        if len(listing) > 0 and len(listing) < 5:
-                            log(f"    IDs: {listing[:5]}", "info")
-                        pos = find_position(listing, target)
-                        
-                        output.append({
-                            "store": store_label,
-                            "keyword": kw,
-                            "region": region.upper(),
-                            "position": pos if pos > 0 else "-"
-                        })
-                        
-                        if pos > 0:
-                            log(f"  {kw} [{region.upper()}] -> #{pos}", "ok")
-                        else:
-                            log(f"  {kw} [{region.upper()}] -> not found", "warn")
-        
-        browser.close()
+                stores = task.get("platforms", ["play"])
+                if isinstance(stores, str):
+                    stores = [stores]
+                
+                android_id = task.get("android_id", "")
+                ios_id = str(task.get("ios_id", ""))
+                limit = task.get("n_hits", 50)
+                
+                for store in stores:
+                    target = ios_id if store == "app" else android_id
+                    store_label = "iOS" if store == "app" else "Android"
+                    pbar = ios_pbar if store == "app" else android_pbar
+                    
+                    for kw in task.get("keywords", []):
+                        for region in task.get("countries", []):
+                            try:
+                                if store == "app":
+                                    listing = scrape_ios(page, kw, region.lower(), limit)
+                                else:
+                                    listing = scrape_android(kw, region, limit)
+                                
+                                pos = find_position(listing, target)
+                                
+                                output.append({
+                                    "store": store_label,
+                                    "keyword": kw,
+                                    "region": region.upper(),
+                                    "position": pos if pos > 0 else "-"
+                                })
+                            except Exception as e:
+                                output.append({
+                                    "store": store_label,
+                                    "keyword": kw,
+                                    "region": region.upper(),
+                                    "position": "ERROR"
+                                })
+                            finally:
+                                if pbar:
+                                    pbar.update(1)
+            
+            if android_pbar:
+                android_pbar.close()
+            if ios_pbar:
+                ios_pbar.close()
+            
+            browser.close()
+    except Exception as e:
+        if browser:
+            try:
+                browser.close()
+            except:
+                pass
+        raise
     
     return output
 
@@ -135,8 +178,10 @@ def print_results(data):
     
     print("-" * 60)
     
-    ranked = sum(1 for r in data if r["position"] != "-")
-    print(f"Total: {len(data)} | Ranked: {ranked} | Not found: {len(data) - ranked}\n")
+    ranked = sum(1 for r in data if r["position"] not in ["-", "ERROR"])
+    errors = sum(1 for r in data if r["position"] == "ERROR")
+    not_found = sum(1 for r in data if r["position"] == "-")
+    print(f"Total: {len(data)} | Ranked: {ranked} | Not found: {not_found} | Errors: {errors}\n")
 
 
 def save_results(data):
@@ -144,12 +189,9 @@ def save_results(data):
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_file = Path(f"results/scan_{ts}.json")
     out_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    log(f"Results saved to {out_file}", "ok")
 
 
 if __name__ == "__main__":
-    log("Starting scan...")
     results = run_scan()
     print_results(results)
     save_results(results)
-    log("Done.")
