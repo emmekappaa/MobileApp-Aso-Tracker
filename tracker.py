@@ -14,12 +14,6 @@ import google_play_scraper
 from tqdm import tqdm
 
 
-def log(msg, level="info"):
-    ts = datetime.now().strftime("%H:%M:%S")
-    prefix = {"info": ".", "ok": "+", "warn": "!", "err": "x"}.get(level, ".")
-    print(f"[{ts}] ({prefix}) {msg}")
-
-
 def load_config():
     return json.loads(Path("settings.json").read_text(encoding="utf-8"))
 
