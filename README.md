@@ -12,6 +12,7 @@
 - **Multi-region support** - Track rankings across different countries
 - **Batch processing** - Scan multiple keywords simultaneously
 - **JSON export** - Automatic timestamped result saving
+- **AI-powered analysis** - Turn raw rankings into an actionable ASO report using a local LLM
 
 ## 🚀 Quick Start
 
@@ -94,9 +95,31 @@ Total: 12 | Ranked: 11 | Not found: 1 | Errors: 0
 
 Results automatically saved in `results/scan_YYYYMMDD_HHMMSS.json`
 
+## 🤖 AI Analysis (optional)
+
+Once you have at least one scan, generate a natural-language ASO report from the results:
+
+```bash
+python analyze.py
+```
+
+It compares the latest scan to the previous one, computes per-keyword position deltas, and sends
+a compact summary (not the raw JSON) to a local LLM to flag underperforming keywords, keywords
+worth reinforcing, and unusual patterns (e.g. a sudden drop in a specific country/store).
+
+Runs fully offline via [Ollama](https://ollama.com/) - no API key, no cost:
+
+```bash
+ollama pull qwen2.5:7b-instruct
+ollama serve
+```
+
+The report is printed to console and saved as `results/analysis_YYYYMMDD_HHMMSS.txt`.
+
 ## 🛠️ Tech Stack
 
 - **[Playwright](https://playwright.dev/)** - Chromium browser automation for accurate web scraping
+- **[Ollama](https://ollama.com/)** - Local LLM inference for AI-powered ASO analysis
 
 ## 📝 License
 
