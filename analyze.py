@@ -5,6 +5,7 @@ using a local LLM via Ollama (no API key, no cost).
 """
 import json
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 import requests
@@ -12,17 +13,24 @@ import requests
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL = "qwen2.5:7b-instruct"
 
-SYSTEM_PROMPT = """You are an ASO (App Store Optimization) analyst. You receive ranking data \
-for an app across keywords, stores (iOS/Android) and countries, comparing the current scan to \
-the previous one (when available). Write a concise, concrete report IN ENGLISH covering:
+STRONG_RANK = 3          # position <= this is "strong"
+WEAK_RANK = 20            # position > this counts as underperforming
+BIG_MOVE = 3               # |delta| >= this counts as a notable drop/improvement
+STORE_GAP = 10              # |Android pos - iOS pos| >= this counts as a store inconsistency
 
-- which keywords are underperforming and might benefit from a metadata change (title, subtitle, description)
-- which keywords are strong and worth reinforcing (e.g. in the title)
-- notable patterns: sudden drops in a specific country or store, inconsistencies between iOS and Android
+SYSTEM_PROMPT = """You are an ASO (App Store Optimization) analyst. You receive a set of \
+PRE-COMPUTED facts about an app's keyword rankings (underperforming keywords, strong keywords, \
+big moves vs. the previous scan, and iOS/Android inconsistencies). These facts were already \
+verified by code — do not recompute, contradict, or invent any position, delta or ranking \
+beyond what is given.
 
-Base your analysis only on the provided data, no generic filler. Use a short bullet list.
-Note: "-" means the keyword was not found in the results, "ERROR" means the scan failed for that \
-row; a lower position number = better ranking. A positive "delta" means improvement vs. the previous scan.
+Write a concise, concrete report IN ENGLISH that:
+- explains which underperforming keywords might benefit from a metadata change (title, subtitle, description)
+- highlights which strong keywords are worth reinforcing (e.g. in the title)
+- calls out the notable patterns (drops, improvements, iOS/Android inconsistencies) and what they might mean
+
+Use a short bullet list. No generic filler, no numbers or claims that aren't in the input data. \
+If a fact list is empty, skip that section instead of making something up.
 """
 
 
@@ -57,12 +65,51 @@ def build_summary(latest, previous):
     return summary
 
 
-def call_ollama(summary):
+def compute_insights(summary):
+    underperforming = [
+        r for r in summary
+        if r["position"] in ("-", "ERROR") or (isinstance(r["position"], int) and r["position"] > WEAK_RANK)
+    ]
+    strong = [r for r in summary if isinstance(r["position"], int) and r["position"] <= STRONG_RANK]
+    drops = [r for r in summary if r["delta"] is not None and r["delta"] <= -BIG_MOVE]
+    improvements = [r for r in summary if r["delta"] is not None and r["delta"] >= BIG_MOVE]
+
+    by_keyword_region = defaultdict(dict)
+    for r in summary:
+        by_keyword_region[(r["keyword"], r["region"])][r["store"]] = r["position"]
+
+    store_inconsistencies = []
+    for (keyword, region), positions in by_keyword_region.items():
+        android_pos = positions.get("Android")
+        ios_pos = positions.get("iOS")
+        android_found = isinstance(android_pos, int)
+        ios_found = isinstance(ios_pos, int)
+        is_gap = android_found != ios_found or (
+            android_found and ios_found and abs(android_pos - ios_pos) >= STORE_GAP
+        )
+        if is_gap:
+            store_inconsistencies.append({
+                "keyword": keyword,
+                "region": region,
+                "android_position": android_pos,
+                "ios_position": ios_pos,
+            })
+
+    return {
+        "underperforming_keywords": underperforming,
+        "strong_keywords": strong,
+        "notable_drops": drops,
+        "notable_improvements": improvements,
+        "store_inconsistencies": store_inconsistencies,
+    }
+
+
+def call_ollama(insights):
     payload = {
         "model": MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": json.dumps(summary, ensure_ascii=False)},
+            {"role": "user", "content": json.dumps(insights, ensure_ascii=False)},
         ],
         "stream": False,
         "options": {"temperature": 0},
@@ -78,12 +125,13 @@ def call_ollama(summary):
 def run_analysis():
     latest, previous, latest_name, previous_name = load_results()
     summary = build_summary(latest, previous)
+    insights = compute_insights(summary)
 
     comparison = f"vs {previous_name}" if previous_name else "(nessuno scan precedente per il confronto)"
     print(f"Analisi di {latest_name} {comparison}")
     print(f"Modello locale: {MODEL} (Ollama)...\n")
 
-    report = call_ollama(summary)
+    report = call_ollama(insights)
 
     print("=" * 60)
     print("AI ANALYSIS")
