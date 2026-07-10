@@ -3,6 +3,7 @@
 AI-powered ASO analysis: turns raw rank-scan JSON into an actionable report
 using a local LLM via Ollama (no API key, no cost).
 """
+import argparse
 import json
 import sys
 from collections import defaultdict
@@ -11,7 +12,7 @@ from pathlib import Path
 import requests
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL = "qwen2.5:7b-instruct"
+DEFAULT_MODEL = "qwen2.5:7b-instruct"
 
 STRONG_RANK = 3          # position <= this is "strong"
 WEAK_RANK = 20            # position > this counts as underperforming
@@ -104,9 +105,9 @@ def compute_insights(summary):
     }
 
 
-def call_ollama(insights):
+def call_ollama(insights, model):
     payload = {
-        "model": MODEL,
+        "model": model,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": json.dumps(insights, ensure_ascii=False)},
@@ -122,16 +123,16 @@ def call_ollama(insights):
     return resp.json()["message"]["content"]
 
 
-def run_analysis():
+def run_analysis(model):
     latest, previous, latest_name, previous_name = load_results()
     summary = build_summary(latest, previous)
     insights = compute_insights(summary)
 
     comparison = f"vs {previous_name}" if previous_name else "(nessuno scan precedente per il confronto)"
     print(f"Analisi di {latest_name} {comparison}")
-    print(f"Modello locale: {MODEL} (Ollama)...\n")
+    print(f"Modello locale: {model} (Ollama)...\n")
 
-    report = call_ollama(insights)
+    report = call_ollama(insights, model)
 
     print("=" * 60)
     print("AI ANALYSIS")
@@ -144,4 +145,7 @@ def run_analysis():
 
 
 if __name__ == "__main__":
-    run_analysis()
+    parser = argparse.ArgumentParser(description="AI-powered ASO analysis of the latest scan.")
+    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Ollama model to use (default: {DEFAULT_MODEL})")
+    args = parser.parse_args()
+    run_analysis(args.model)
