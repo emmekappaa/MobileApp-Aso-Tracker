@@ -113,63 +113,60 @@ def run_scan():
     output = []
     
     android_searches, ios_searches = count_searches(config)
-    
-    try:
-        with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True)
-            page = browser.new_page()
-            
-            android_pbar = tqdm(total=android_searches, desc="Android", unit="", 
-                               bar_format='{desc} |{bar}| {percentage:3.0f}%') if android_searches > 0 else None
-            ios_pbar = tqdm(total=ios_searches, desc="iOS", unit="", 
-                           bar_format='{desc} |{bar}| {percentage:3.0f}%') if ios_searches > 0 else None
-            
-            for task in config:
-                if not task.get("active", True):
-                    continue
-                
-                stores = normalize_platforms(task.get("platforms", ["play"]))
-                android_id = task.get("android_id", "")
-                ios_id = str(task.get("ios_id", ""))
-                limit = task.get("n_hits", 50)
-                
-                for store in stores:
-                    target = ios_id if store == "app" else android_id
-                    store_label = "iOS" if store == "app" else "Android"
-                    pbar = ios_pbar if store == "app" else android_pbar
-                    
-                    for kw in task.get("keywords", []):
-                        for region in task.get("countries", []):
-                            try:
-                                listing = scrape_ios(page, kw, region.lower(), limit) if store == "app" else scrape_android(page, kw, region.lower(), limit)
-                                pos = find_position(listing, target)
-                                
-                                output.append({
-                                    "store": store_label,
-                                    "keyword": kw,
-                                    "region": region.upper(),
-                                    "position": pos if pos > 0 else "-"
-                                })
-                            except Exception:
-                                output.append({
-                                    "store": store_label,
-                                    "keyword": kw,
-                                    "region": region.upper(),
-                                    "position": "ERROR"
-                                })
-                            finally:
-                                if pbar:
-                                    pbar.update(1)
-            
-            if android_pbar:
-                android_pbar.close()
-            if ios_pbar:
-                ios_pbar.close()
-            
-            browser.close()
-    except Exception:
-        raise
-    
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        android_pbar = tqdm(total=android_searches, desc="Android", unit="",
+                           bar_format='{desc} |{bar}| {percentage:3.0f}%') if android_searches > 0 else None
+        ios_pbar = tqdm(total=ios_searches, desc="iOS", unit="",
+                       bar_format='{desc} |{bar}| {percentage:3.0f}%') if ios_searches > 0 else None
+
+        for task in config:
+            if not task.get("active", True):
+                continue
+
+            stores = normalize_platforms(task.get("platforms", ["play"]))
+            android_id = task.get("android_id", "")
+            ios_id = str(task.get("ios_id", ""))
+            limit = task.get("n_hits", 50)
+
+            for store in stores:
+                target = ios_id if store == "app" else android_id
+                store_label = "iOS" if store == "app" else "Android"
+                pbar = ios_pbar if store == "app" else android_pbar
+
+                for kw in task.get("keywords", []):
+                    for region in task.get("countries", []):
+                        try:
+                            listing = scrape_ios(page, kw, region.lower(), limit) if store == "app" else scrape_android(page, kw, region.lower(), limit)
+                            pos = find_position(listing, target)
+
+                            output.append({
+                                "store": store_label,
+                                "keyword": kw,
+                                "region": region.upper(),
+                                "position": pos if pos > 0 else "-"
+                            })
+                        except Exception:
+                            output.append({
+                                "store": store_label,
+                                "keyword": kw,
+                                "region": region.upper(),
+                                "position": "ERROR"
+                            })
+                        finally:
+                            if pbar:
+                                pbar.update(1)
+
+        if android_pbar:
+            android_pbar.close()
+        if ios_pbar:
+            ios_pbar.close()
+
+        browser.close()
+
     return output
 
 

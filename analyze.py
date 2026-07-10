@@ -38,7 +38,7 @@ If a fact list is empty, skip that section instead of making something up.
 def load_results():
     files = sorted(Path("results").glob("scan_*.json"))
     if not files:
-        sys.exit("Nessun risultato in results/. Esegui prima tracker.py.")
+        sys.exit("No results found in results/. Run tracker.py first.")
     latest = json.loads(files[-1].read_text(encoding="utf-8"))
     previous = json.loads(files[-2].read_text(encoding="utf-8")) if len(files) > 1 else None
     return latest, previous, files[-1].name, (files[-2].name if previous else None)
@@ -118,9 +118,11 @@ def call_ollama(insights, model):
     try:
         resp = requests.post(OLLAMA_URL, json=payload, timeout=180)
         resp.raise_for_status()
+        return resp.json()["message"]["content"]
     except requests.ConnectionError:
-        sys.exit(f"Impossibile contattare Ollama su {OLLAMA_URL}. È in esecuzione? (ollama serve)")
-    return resp.json()["message"]["content"]
+        sys.exit(f"Could not reach Ollama at {OLLAMA_URL}. Is it running? (ollama serve)")
+    except (requests.HTTPError, json.JSONDecodeError, KeyError):
+        sys.exit(f"Unexpected response from Ollama for model '{model}'. Is it pulled? (ollama pull {model})")
 
 
 def run_analysis(model):
@@ -128,9 +130,9 @@ def run_analysis(model):
     summary = build_summary(latest, previous)
     insights = compute_insights(summary)
 
-    comparison = f"vs {previous_name}" if previous_name else "(nessuno scan precedente per il confronto)"
-    print(f"Analisi di {latest_name} {comparison}")
-    print(f"Modello locale: {model} (Ollama)...\n")
+    comparison = f"vs {previous_name}" if previous_name else "(no previous scan to compare against)"
+    print(f"Analyzing {latest_name} {comparison}")
+    print(f"Local model: {model} (Ollama)...\n")
 
     report = call_ollama(insights, model)
 
@@ -141,7 +143,7 @@ def run_analysis(model):
 
     out_file = Path("results") / f"analysis_{Path(latest_name).stem.replace('scan_', '')}.txt"
     out_file.write_text(report, encoding="utf-8")
-    print(f"\nSalvato in {out_file}")
+    print(f"\nSaved to {out_file}")
 
 
 if __name__ == "__main__":
