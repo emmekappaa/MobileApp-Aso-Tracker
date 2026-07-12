@@ -1,0 +1,30 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - "11434:11434"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "ollama serve & sleep 3 && ollama pull qwen2.5:7b-instruct; wait"
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep -q qwen2.5"]
+      interval: 5s
+      timeout: 5s
+      retries: 120
+
+  tracker:
+    build: .
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    volumes:
+      - ./settings.json:/app/settings.json:ro
+      - ./results:/app/results
+    command: sh -c "python tracker.py && python analyze.py"
+
+volumes:
+  ollama_models:

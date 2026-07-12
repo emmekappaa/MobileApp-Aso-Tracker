@@ -1,0 +1,10 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.claude
+results
+settings.json
+README.md
+LICENSE.txt

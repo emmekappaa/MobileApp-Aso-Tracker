@@ -5,19 +5,21 @@ using a local LLM via Ollama (no API key, no cost).
 """
 import argparse
 import json
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 import requests
 
-OLLAMA_URL = "http://localhost:11434/api/chat"
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_URL = f"{OLLAMA_HOST}/api/chat"
 DEFAULT_MODEL = "qwen2.5:7b-instruct"
 
-STRONG_RANK = 3          # position <= this is "strong"
-WEAK_RANK = 20            # position > this counts as underperforming
-BIG_MOVE = 3               # |delta| >= this counts as a notable drop/improvement
-STORE_GAP = 10              # |Android pos - iOS pos| >= this counts as a store inconsistency
+STRONG_RANK = 3   # position <= this is "strong"
+WEAK_RANK = 20    # position > this counts as underperforming
+BIG_MOVE = 3      # |delta| >= this counts as a notable drop/improvement
+STORE_GAP = 10    # |Android pos - iOS pos| >= this counts as a store inconsistency
 
 SYSTEM_PROMPT = """You are an ASO (App Store Optimization) analyst. You receive a set of \
 PRE-COMPUTED facts about an app's keyword rankings (underperforming keywords, strong keywords, \

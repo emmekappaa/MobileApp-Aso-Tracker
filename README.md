@@ -14,28 +14,13 @@
 - **JSON export** - Automatic timestamped result saving
 - **AI-powered analysis** - Turn raw rankings into an actionable ASO report using a local LLM
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Docker)
 
-### Installation
+The fastest way to run the whole stack (scraper + local LLM), no Python/Playwright/Ollama install needed.
 
-```bash
-# Create virtual environment
-python -m venv .venv
+### 1. Configure
 
-# Activate virtual environment
-# macOS/Linux:
-source .venv/bin/activate
-# Windows:
-.venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-playwright install chromium
-```
-
-### Configuration
-
-Create `settings.json`:
+Create `settings.json` in the project root:
 
 ```json
 [
@@ -62,10 +47,19 @@ Create `settings.json`:
 | `keywords` | array | Search terms to track |
 | `countries` | array | Country codes (e.g., `["us", "it", "de"]`) |
 
-### Run
+### 2. Run
 
 ```bash
-python tracker.py
+docker compose up
+```
+
+That's it — it starts Ollama, pulls `qwen2.5:7b-instruct` on first run, waits until the model is
+ready, then runs a scan followed by the AI analysis. `settings.json` and `results/` are
+bind-mounted into the `tracker` container, and the Ollama model is stored in a named volume so it's
+only downloaded once. For subsequent scans, once Ollama is already up:
+
+```bash
+docker compose run --rm tracker
 ```
 
 ## 📈 Example Output
@@ -95,26 +89,46 @@ Total: 12 | Ranked: 11 | Not found: 1 | Errors: 0
 
 Results automatically saved in `results/scan_YYYYMMDD_HHMMSS.json`
 
-## 🤖 AI Analysis (optional)
+## 🤖 About the AI Analysis
 
-Once you have at least one scan, generate a natural-language ASO report from the results:
+`analyze.py` turns the raw scan JSON into a natural-language ASO report. It compares the latest
+scan to the previous one, computes per-keyword position deltas, and sends a compact summary (not
+the raw JSON) to a local LLM to flag underperforming keywords, keywords worth reinforcing, and
+unusual patterns (e.g. a sudden drop in a specific country/store, or an inconsistency between
+iOS and Android). Runs fully offline via [Ollama](https://ollama.com/) - no API key, no cost. The
+report is printed to console and saved as `results/analysis_YYYYMMDD_HHMMSS.txt`.
+
+Use `--model` to try a different Ollama model, e.g. `python analyze.py --model qwen2.5:14b-instruct`.
+
+## 🐍 Manual Installation (without Docker)
+
+Prefer running natively? You'll need Python, [Ollama](https://ollama.com/) installed locally, and:
 
 ```bash
-python analyze.py
+# Create virtual environment
+python -m venv .venv
+
+# Activate virtual environment
+# macOS/Linux:
+source .venv/bin/activate
+# Windows:
+.venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+playwright install chromium
 ```
 
-It compares the latest scan to the previous one, computes per-keyword position deltas, and sends
-a compact summary (not the raw JSON) to a local LLM to flag underperforming keywords, keywords
-worth reinforcing, and unusual patterns (e.g. a sudden drop in a specific country/store).
-
-Runs fully offline via [Ollama](https://ollama.com/) - no API key, no cost:
+Create `settings.json` as described above, then:
 
 ```bash
+python tracker.py
+
+# optional: AI analysis of the results
 ollama pull qwen2.5:7b-instruct
 ollama serve
+python analyze.py
 ```
-
-The report is printed to console and saved as `results/analysis_YYYYMMDD_HHMMSS.txt`.
 
 ## 🛠️ Tech Stack
 
