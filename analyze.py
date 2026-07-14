@@ -22,15 +22,17 @@ BIG_MOVE = 3      # |delta| >= this counts as a notable drop/improvement
 STORE_GAP = 10    # |Android pos - iOS pos| >= this counts as a store inconsistency
 
 SYSTEM_PROMPT = """You are an ASO (App Store Optimization) analyst. You receive a set of \
-PRE-COMPUTED facts about an app's keyword rankings (underperforming keywords, strong keywords, \
-big moves vs. the previous scan, and iOS/Android inconsistencies). These facts were already \
+PRE-COMPUTED facts about an app's keyword rankings (underperforming ranked keywords, not-ranked keywords, \
+technical scrape errors, strong keywords, big moves vs. the previous scan, and iOS/Android inconsistencies). These facts were already \
 verified by code — do not recompute, contradict, or invent any position, delta or ranking \
 beyond what is given.
 
 Write a concise, concrete report IN ENGLISH that:
-- explains which underperforming keywords might benefit from a metadata change (title, subtitle, description)
+- explains which underperforming ranked keywords might benefit from a metadata change (title, subtitle, description)
 - highlights which strong keywords are worth reinforcing (e.g. in the title)
 - calls out the notable patterns (drops, improvements, iOS/Android inconsistencies) and what they might mean
+- treats not-ranked and technical scrape errors as separate diagnostic categories
+- never recommends metadata changes based only on technical scrape errors
 
 Use a short bullet list. No generic filler, no numbers or claims that aren't in the input data. \
 If a fact list is empty, skip that section instead of making something up.
@@ -69,10 +71,9 @@ def build_summary(latest, previous):
 
 
 def compute_insights(summary):
-    underperforming = [
-        r for r in summary
-        if r["position"] in ("-", "ERROR") or (isinstance(r["position"], int) and r["position"] > WEAK_RANK)
-    ]
+    underperforming = [r for r in summary if isinstance(r["position"], int) and r["position"] > WEAK_RANK]
+    not_ranked = [r for r in summary if r["position"] == "-"]
+    scrape_errors = [r for r in summary if r["position"] == "ERROR"]
     strong = [r for r in summary if isinstance(r["position"], int) and r["position"] <= STRONG_RANK]
     drops = [r for r in summary if r["delta"] is not None and r["delta"] <= -BIG_MOVE]
     improvements = [r for r in summary if r["delta"] is not None and r["delta"] >= BIG_MOVE]
@@ -99,7 +100,9 @@ def compute_insights(summary):
             })
 
     return {
-        "underperforming_keywords": underperforming,
+        "underperforming_ranked_keywords": underperforming,
+        "not_ranked_keywords": not_ranked,
+        "technical_scrape_errors": scrape_errors,
         "strong_keywords": strong,
         "notable_drops": drops,
         "notable_improvements": improvements,

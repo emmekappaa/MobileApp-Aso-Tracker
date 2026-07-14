@@ -3,18 +3,112 @@
 Store Rank Scanner - Tracks app positions across iOS and Android stores.
 """
 import json
+import logging
 import re
+import sys
 import time
 import urllib.parse
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
+from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 from tqdm import tqdm
 
 
+logger = logging.getLogger("aso_tracker")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+ALLOWED_PLATFORMS = {"play", "app"}
+
+
+class ConfigError(ValueError):
+    pass
+
+
+class ScrapeError(RuntimeError):
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
 def load_config():
-    return json.loads(Path("settings.json").read_text(encoding="utf-8"))
+    try:
+        raw = json.loads(Path("settings.json").read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise ConfigError("settings.json not found")
+    except json.JSONDecodeError as exc:
+        raise ConfigError(f"settings.json is not valid JSON: {exc.msg} (line {exc.lineno})")
+
+    if not isinstance(raw, list) or not raw:
+        raise ConfigError("root must be a non-empty JSON array")
+
+    normalized = []
+    has_active_task = False
+    for i, task in enumerate(raw, start=1):
+        if not isinstance(task, dict):
+            raise ConfigError(f"task #{i} must be an object")
+
+        active = task.get("active", True)
+        if not isinstance(active, bool):
+            raise ConfigError(f"task #{i}: 'active' must be boolean")
+
+        stores = normalize_platforms(task.get("platforms", ["play"]))
+        if not isinstance(stores, list) or not stores:
+            raise ConfigError(f"task #{i}: 'platforms' must be a non-empty string or array")
+        if any(not isinstance(s, str) for s in stores):
+            raise ConfigError(f"task #{i}: every platform must be a string")
+        stores = [s.strip().lower() for s in stores if s.strip()]
+        if not stores:
+            raise ConfigError(f"task #{i}: 'platforms' cannot be empty")
+
+        unknown = [s for s in stores if s not in ALLOWED_PLATFORMS]
+        if unknown:
+            raise ConfigError(f"task #{i}: unsupported platforms {unknown}, allowed: {sorted(ALLOWED_PLATFORMS)}")
+
+        keywords = task.get("keywords")
+        if not isinstance(keywords, list) or not keywords:
+            raise ConfigError(f"task #{i}: 'keywords' must be a non-empty array")
+        if any(not isinstance(k, str) or not k.strip() for k in keywords):
+            raise ConfigError(f"task #{i}: every keyword must be a non-empty string")
+
+        countries = task.get("countries")
+        if not isinstance(countries, list) or not countries:
+            raise ConfigError(f"task #{i}: 'countries' must be a non-empty array")
+        if any(not isinstance(c, str) or not c.strip() for c in countries):
+            raise ConfigError(f"task #{i}: every country must be a non-empty string")
+
+        n_hits = task.get("n_hits", 50)
+        if not isinstance(n_hits, int) or n_hits <= 0:
+            raise ConfigError(f"task #{i}: 'n_hits' must be an integer greater than 0")
+
+        android_id = task.get("android_id", "")
+        if "play" in stores and (not isinstance(android_id, str) or not android_id.strip()):
+            raise ConfigError(f"task #{i}: 'android_id' is required when platform includes 'play'")
+
+        ios_id = task.get("ios_id", "")
+        ios_id_str = str(ios_id).strip()
+        if "app" in stores and (not ios_id_str or not ios_id_str.isdigit()):
+            raise ConfigError(f"task #{i}: 'ios_id' is required and must be numeric when platform includes 'app'")
+
+        normalized.append({
+            **task,
+            "platforms": stores,
+            "keywords": [k.strip() for k in keywords],
+            "countries": [c.strip().lower() for c in countries],
+            "n_hits": n_hits,
+            "android_id": android_id.strip() if isinstance(android_id, str) else android_id,
+            "ios_id": ios_id_str,
+        })
+        if active:
+            has_active_task = True
+
+    if not has_active_task:
+        raise ConfigError("no active tasks found")
+
+    return normalized
 
 
 def scrape_ios(page, term, region, limit):
@@ -22,8 +116,10 @@ def scrape_ios(page, term, region, limit):
     try:
         page.goto(url, timeout=30000)
         page.wait_for_timeout(3000)
-    except Exception:
-        return []
+    except PlaywrightTimeoutError as exc:
+        raise ScrapeError("timeout", f"iOS timeout for term='{term}' region='{region}'") from exc
+    except PlaywrightError as exc:
+        raise ScrapeError("navigation", f"iOS navigation failure for term='{term}' region='{region}': {exc}") from exc
     
     found = []
     max_scrolls = max(8, limit // 15)
@@ -39,8 +135,8 @@ def scrape_ios(page, term, region, limit):
                     return found
             page.evaluate("window.scrollBy(0, 1500)")
             time.sleep(0.4)
-        except Exception:
-            break
+        except PlaywrightError as exc:
+            raise ScrapeError("dom", f"iOS DOM failure for term='{term}' region='{region}': {exc}") from exc
     return found
 
 
@@ -51,8 +147,10 @@ def scrape_android(page, term, region, limit):
     try:
         page.goto(url, timeout=30000)
         page.wait_for_timeout(3000)
-    except Exception:
-        return []
+    except PlaywrightTimeoutError as exc:
+        raise ScrapeError("timeout", f"Android timeout for term='{term}' region='{region}'") from exc
+    except PlaywrightError as exc:
+        raise ScrapeError("navigation", f"Android navigation failure for term='{term}' region='{region}': {exc}") from exc
     
     found = []
     max_scrolls = max(8, limit // 20)
@@ -70,8 +168,8 @@ def scrape_android(page, term, region, limit):
             
             page.evaluate("window.scrollBy(0, 2000)")
             time.sleep(0.5)
-        except Exception:
-            break
+        except PlaywrightError as exc:
+            raise ScrapeError("dom", f"Android DOM failure for term='{term}' region='{region}': {exc}") from exc
     
     return found
 
@@ -109,8 +207,13 @@ def count_searches(config):
 
 
 def run_scan():
-    config = load_config()
+    try:
+        config = load_config()
+    except ConfigError as exc:
+        sys.exit(f"Invalid settings.json: {exc}")
+
     output = []
+    error_stats = defaultdict(int)
     
     android_searches, ios_searches = count_searches(config)
 
@@ -149,7 +252,18 @@ def run_scan():
                                 "region": region.upper(),
                                 "position": pos if pos > 0 else "-"
                             })
-                        except Exception:
+                        except ScrapeError as exc:
+                            error_stats[exc.code] += 1
+                            logger.warning(str(exc))
+                            output.append({
+                                "store": store_label,
+                                "keyword": kw,
+                                "region": region.upper(),
+                                "position": "ERROR"
+                            })
+                        except Exception as exc:
+                            error_stats["unexpected"] += 1
+                            logger.exception("Unexpected scrape error for store='%s' region='%s' keyword='%s': %s", store_label, region.upper(), kw, exc)
                             output.append({
                                 "store": store_label,
                                 "keyword": kw,
@@ -166,6 +280,10 @@ def run_scan():
             ios_pbar.close()
 
         browser.close()
+
+    if error_stats:
+        summary = ", ".join(f"{k}={v}" for k, v in sorted(error_stats.items()))
+        logger.info("Scrape error summary: %s", summary)
 
     return output
 
