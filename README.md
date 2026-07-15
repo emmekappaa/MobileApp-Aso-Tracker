@@ -1,6 +1,6 @@
 # Mobile ASO Tracker
 
-**Real-time ASO tracking tool** for monitoring app positions across Google Play Store and Apple App Store.
+**ASO ranking tracker** for monitoring app positions across Google Play and the App Store.
 
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Playwright](https://img.shields.io/badge/playwright-latest-green.svg)](https://playwright.dev/)
@@ -8,7 +8,7 @@
 
 ## ✨ Features
 
-- **Dual-store tracking** - Monitor both iOS App Store and Google Play
+- **Dual-store tracking** - Track both Google Play and the App Store
 - **Multi-region support** - Track rankings across different countries
 - **Batch processing** - Scan multiple keywords simultaneously
 - **JSON export** - Automatic timestamped result saving
@@ -16,11 +16,11 @@
 
 ## 🚀 Quick Start (Docker)
 
-The fastest way to run the whole stack (scraper + local LLM), no Python/Playwright/Ollama install needed.
+The fastest way to run the full stack (scraper + local LLM). No separate Python, Playwright, or Ollama installation is needed.
 
 ### 1. Configure
 
-Create `settings.json` in the project root:
+Create a `settings.json` file in the project root:
 
 ```json
 [
@@ -40,10 +40,10 @@ Create `settings.json` in the project root:
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `active` | boolean | Enable/disable this tracking task |
-| `platforms` | array | Stores to scan: `"play"` (Google Play), `"app"` (App Store) |
+| `platforms` | array | Platforms to scan: `"play"` (Google Play), `"app"` (App Store) |
 | `android_id` | string | App package name (e.g., `"com.example.app"`) |
 | `ios_id` | string | App Store numeric ID (e.g., `"1234567890"`) |
-| `n_hits` | integer | Search depth (default: `50`) higher = slower but deeper |
+| `n_hits` | integer | Maximum search depth (default: `50`). Higher values are slower but may return more results |
 | `keywords` | array | Search terms to track |
 | `countries` | array | Country codes (e.g., `["us", "it", "de"]`) |
 
@@ -53,10 +53,10 @@ Create `settings.json` in the project root:
 docker compose up
 ```
 
-That's it — it starts Ollama, pulls `qwen2.5:7b-instruct` on first run, waits until the model is
-ready, then runs a scan followed by the AI analysis. `settings.json` and `results/` are
-bind-mounted into the `tracker` container, and the Ollama model is stored in a named volume so it's
-only downloaded once. For subsequent scans, once Ollama is already up:
+That's it: Docker starts Ollama, pulls `qwen2.5:7b-instruct` on the first run, waits until the
+model is ready, then runs a scan followed by the AI analysis. `settings.json` and `results/` are
+bind-mounted into the `tracker` container, and the Ollama model is stored in a named volume so it
+is downloaded only once. For subsequent scans, once Ollama is already running:
 
 ```bash
 docker compose run --rm tracker
