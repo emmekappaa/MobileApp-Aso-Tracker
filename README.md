@@ -11,7 +11,7 @@
 - **Dual-store tracking** - Track both Google Play and the App Store
 - **Multi-region support** - Track rankings across different countries
 - **Batch processing** - Scan multiple keywords simultaneously
-- **JSON export** - Automatic timestamped result saving
+- **JSON export** - Automatically saves timestamped results
 - **AI-powered analysis** - Turn raw rankings into an actionable ASO report using a local LLM
 
 ## 🚀 Quick Start (Docker)
@@ -56,7 +56,7 @@ docker compose up
 That's it: Docker starts Ollama, pulls `qwen2.5:7b-instruct` on the first run, waits until the
 model is ready, then runs a scan followed by the AI analysis. `settings.json` and `results/` are
 bind-mounted into the `tracker` container, and the Ollama model is stored in a named volume so it
-is downloaded only once. For subsequent scans, once Ollama is already running:
+is downloaded only once. For later scans, once Ollama is already running:
 
 ```bash
 docker compose run --rm tracker
