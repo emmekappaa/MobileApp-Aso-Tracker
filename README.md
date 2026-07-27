@@ -40,7 +40,7 @@ Create a `settings.json` file in the project root:
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `active` | boolean | Enable/disable this tracking task |
-| `platforms` | array | Platforms to scan: `"play"` (Google Play), `"app"` (App Store) |
+| `platforms` | string or array | Platforms to scan: `"play"` (Google Play), `"app"` (App Store) |
 | `android_id` | string | App package name (e.g., `"com.example.app"`) |
 | `ios_id` | string | App Store numeric ID (e.g., `"1234567890"`) |
 | `n_hits` | integer | Maximum search depth (default: `50`). Higher values are slower but may return more results |

@@ -125,6 +125,7 @@ def scrape_ios(page, term, region, limit):
     max_scrolls = max(8, limit // 15)
     for _ in range(max_scrolls):
         try:
+            # Collect ids from visible links.
             links = page.query_selector_all("a[href*='/app/'], a[href*='/id']")
             for el in links:
                 href = el.get_attribute("href") or ""
@@ -166,6 +167,7 @@ def scrape_android(page, term, region, limit):
                 if len(found) >= limit:
                     return found
             
+            # Scroll to load more results.
             page.evaluate("window.scrollBy(0, 2000)")
             time.sleep(0.5)
         except PlaywrightError as exc:
